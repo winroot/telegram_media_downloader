@@ -48,14 +48,23 @@ Our enhanced version includes these bot commands:
 | `/help` | Display help information |
 | `/download` | Start downloading from a chat/channel |
 | `/forward` | Forward messages to another chat |
-| `/cancel_all` | Cancel all active downloads |
-| `/cancel_download [ID]` | Cancel specific download task |
+| `/listen_forward` | Enable listening for forwarded messages |
+| `/forward_to_comments` | Forward messages to channel comments |
+| `/stop` | Stop download/forward tasks (interactive menu) |
 | `/task_info` | Show detailed progress for active downloads |
 | `/pause_download [ID]` | Pause a specific download |
 | `/resume_download [ID]` | Resume a paused download |
+| `/get_info` | Get information about a chat or message |
+| `/set_language` | Change bot language (EN/ZH/RU/UA) |
+| `/add_filter` | Add download filter for a chat |
+| `/show_floodwait` | Show current FloodWait settings |
+| `/set_floodwait` | Configure FloodWait handling |
 | `/reload` | Hot reload code without restart |
+| `/save_state` | Save current application state |
+| `/restore_state` | Restore saved application state |
 | `/network_status` | Check network monitoring status |
 | `/analyze_logs` | Analyze log files for issues |
+| `/update_commands` | Update bot commands in Telegram menu |
 
 ## 🚀 Quick Start
 

@@ -48,14 +48,23 @@
 | `/help` | 显示帮助信息 |
 | `/download` | 开始从聊天/频道下载 |
 | `/forward` | 转发消息到另一个聊天 |
-| `/cancel_all` | 取消所有活动下载 |
-| `/cancel_download [ID]` | 取消指定下载任务 |
+| `/listen_forward` | 启用监听转发消息功能 |
+| `/forward_to_comments` | 转发消息到频道评论 |
+| `/stop` | 停止下载/转发任务（交互式菜单） |
 | `/task_info` | 显示活动下载的详细进度 |
 | `/pause_download [ID]` | 暂停指定下载 |
 | `/resume_download [ID]` | 恢复暂停的下载 |
+| `/get_info` | 获取聊天或消息信息 |
+| `/set_language` | 更改机器人语言 (EN/ZH/RU/UA) |
+| `/add_filter` | 为聊天添加下载过滤器 |
+| `/show_floodwait` | 显示当前 FloodWait 设置 |
+| `/set_floodwait` | 配置 FloodWait 处理方式 |
 | `/reload` | 热重载代码无需重启 |
+| `/save_state` | 保存当前应用状态 |
+| `/restore_state` | 恢复保存的应用状态 |
 | `/network_status` | 检查网络监控状态 |
 | `/analyze_logs` | 分析日志文件查找问题 |
+| `/update_commands` | 更新 Telegram 菜单中的机器人命令 |
 
 ## 🚀 快速开始
 
