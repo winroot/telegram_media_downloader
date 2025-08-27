@@ -752,13 +752,14 @@ def record_download_status(func):
         media_types: List[str],
         file_formats: dict,
         node: TaskNode,
+        app=None,  # 添加 app 参数
     ):
         if _download_cache[(node.chat_id, message.id)] is DownloadStatus.Downloading:
             return DownloadStatus.Downloading, None
 
         _download_cache[(node.chat_id, message.id)] = DownloadStatus.Downloading
 
-        status, file_name = await func(client, message, media_types, file_formats, node)
+        status, file_name = await func(client, message, media_types, file_formats, node, app)  # 传递 app 参数
 
         _download_cache[(node.chat_id, message.id)] = status
 
@@ -817,8 +818,34 @@ async def report_bot_status(
     """see _report_bot_status"""
     try:
         return await _report_bot_status(client, node, immediate_reply)
+    except pyrogram.errors.exceptions.flood_420.FloodWait as wait_err:
+        # FloodWait 错误处理 - 记录等待时间但不阻塞
+        wait_time = wait_err.value
+        logger.warning(
+            f"🕑 消息编辑FloodWait: 需要等待 {wait_time} 秒 (约 {wait_time//3600} 小时)\n"
+            f"  任务ID: {node.task_id}\n"
+            f"  消息ID: {node.reply_message_id}\n"
+            f"  建议: 暂时停止状态更新以避免限制"
+        )
+        # 记录FloodWait结束时间，避免继续尝试编辑
+        if not hasattr(node, 'floodwait_until'):
+            node.floodwait_until = 0
+        node.floodwait_until = time.time() + wait_time
+        
+        # 实现指数退避策略
+        if not hasattr(node, 'floodwait_count'):
+            node.floodwait_count = 0
+        node.floodwait_count += 1
+        
+        # 根据连续FloodWait次数调整等待倍数
+        backoff_multiplier = min(2 ** node.floodwait_count, 32)  # 最大32倍
+        node.min_update_interval = min(5 * backoff_multiplier, 300)  # 最长5分钟
+        
+        logger.info(f"📊 FloodWait计数: {node.floodwait_count}, 新更新间隔: {node.min_update_interval}秒")
+        return None
     except Exception as e:
-        logger.debug(f"{e}")
+        logger.debug(f"更新状态失败: {e}")
+        return None
 
 
 async def _report_bot_status(
@@ -838,6 +865,13 @@ async def _report_bot_status(
         None
     """
     if not node.reply_message_id or not node.bot:
+        return
+    
+    # 检查是否在FloodWait期间
+    if hasattr(node, 'floodwait_until') and time.time() < node.floodwait_until:
+        remaining = int(node.floodwait_until - time.time())
+        if remaining > 0 and remaining % 300 == 0:  # 每5分钟提醒一次
+            logger.info(f"⏳ 仍在FloodWait期间，剩余 {remaining} 秒 (约 {remaining//60} 分钟)")
         return
 
     if immediate_reply or node.can_reply():

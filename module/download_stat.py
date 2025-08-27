@@ -44,6 +44,16 @@ def set_download_state(state: DownloadState):
     _download_state = state
 
 
+def clear_download_result(chat_id: int, message_id: int):
+    """清理已完成的下载记录"""
+    global _download_result
+    if chat_id in _download_result and message_id in _download_result[chat_id]:
+        del _download_result[chat_id][message_id]
+        # 如果该chat没有其他下载任务，删除整个chat记录
+        if not _download_result[chat_id]:
+            del _download_result[chat_id]
+
+
 async def update_download_status(
     down_byte: int,
     total_size: int,
@@ -60,6 +70,24 @@ async def update_download_status(
     global _total_download_size
     global _last_download_time
 
+    # 更新当前文件下载信息到TaskNode
+    import os
+    # 只保存文件名，不要完整路径
+    simple_filename = os.path.basename(file_name) if file_name else file_name
+    node.current_download_file = simple_filename
+    node.current_file_size = total_size
+    node.current_downloaded = down_byte
+    
+    # 调试日志（每10秒记录一次）
+    if not hasattr(node, '_last_progress_log_time'):
+        node._last_progress_log_time = 0
+    
+    if cur_time - node._last_progress_log_time > 10:
+        from loguru import logger
+        progress_percent = (down_byte / total_size * 100) if total_size > 0 else 0
+        logger.debug(f"📊 下载进度 - 文件: {file_name}, 进度: {progress_percent:.1f}%, 大小: {down_byte}/{total_size}")
+        node._last_progress_log_time = cur_time
+    
     if node.is_stop_transmission:
         client.stop_transmission()
 
@@ -92,9 +120,13 @@ async def update_download_status(
 
         download_speed = max(download_speed, 0)
 
+        # 更新TaskNode的下载速度
+        node.download_speed = download_speed
+        
         _download_result[chat_id][message_id]["down_byte"] = down_byte
         _download_result[chat_id][message_id]["end_time"] = end_time
         _download_result[chat_id][message_id]["download_speed"] = download_speed
+        _download_result[chat_id][message_id]["file_name"] = simple_filename  # 更新文件名为简单名称
         _download_result[chat_id][message_id][
             "each_second_total_download"
         ] = each_second_total_download
@@ -103,7 +135,7 @@ async def update_download_status(
         _download_result[chat_id][message_id] = {
             "down_byte": down_byte,
             "total_size": total_size,
-            "file_name": file_name,
+            "file_name": simple_filename,
             "start_time": start_time,
             "end_time": cur_time,
             "download_speed": down_byte / (cur_time - start_time),

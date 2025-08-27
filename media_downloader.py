@@ -15,6 +15,13 @@ from module.app import Application, ChatDownloadConfig, DownloadStatus, TaskNode
 from module.bot import start_download_bot, stop_download_bot
 from module.download_stat import update_download_status
 from module.get_chat_history_v2 import get_chat_history_v2
+from module.hot_reload import (
+    HotReloader,
+    TaskPersistence,
+    create_reload_command,
+    hot_reloader,
+    setup_reload_signal,
+)
 from module.language import _t
 from module.pyrogram_extension import (
     HookClient,
@@ -51,7 +58,70 @@ RETRY_TIME_OUT = 3
 logging.getLogger("pyrogram.session.session").addFilter(LogFilter())
 logging.getLogger("pyrogram.client").addFilter(LogFilter())
 
-logging.getLogger("pyrogram").setLevel(logging.WARNING)
+# 设置日志级别 - 保留更多调试信息
+logging.getLogger("pyrogram").setLevel(logging.INFO)
+logging.getLogger("pyrogram.session").setLevel(logging.INFO)
+logging.getLogger("pyrogram.connection").setLevel(logging.INFO)
+logging.getLogger("asyncio").setLevel(logging.WARNING)
+logging.getLogger("asyncio.selector_events").setLevel(logging.WARNING)
+
+# 创建日志目录
+os.makedirs("logs", exist_ok=True)
+
+# 配置详细的错误日志
+logger.add(
+    "logs/error_{time:YYYY-MM-DD}.log",
+    rotation="1 day",
+    retention="30 days",  # 保留30天
+    level="ERROR",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {name}:{function}:{line} | {message}",
+    backtrace=True,
+    diagnose=True,
+    enqueue=True,  # 异步写入
+    catch=True,    # 捕获日志写入错误
+    encoding="utf-8"
+)
+
+# 配置警告日志
+logger.add(
+    "logs/warning_{time:YYYY-MM-DD}.log", 
+    rotation="1 day",
+    retention="14 days",  # 保留14天
+    level="WARNING",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {name}:{function}:{line} | {message}",
+    backtrace=False,
+    diagnose=False,
+    enqueue=True,
+    catch=True,
+    encoding="utf-8",
+    filter=lambda record: record["level"].name == "WARNING"  # 只记录WARNING级别
+)
+
+# 配置完整日志（包含DEBUG信息）
+logger.add(
+    "logs/full_{time:YYYY-MM-DD}.log",
+    rotation="100 MB",  # 100MB轮转
+    retention="7 days",  # 保留7天
+    level="DEBUG",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {name}:{function}:{line} | {message}",
+    backtrace=True,
+    diagnose=True,
+    enqueue=True,
+    catch=True,
+    encoding="utf-8"
+)
+
+# FloodWait专用日志
+logger.add(
+    "logs/floodwait_{time:YYYY-MM}.log",
+    rotation="1 month",
+    retention="3 months",
+    level="INFO",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {message}",
+    filter=lambda record: "FloodWait" in record["message"],
+    enqueue=True,
+    encoding="utf-8"
+)
 
 
 def _check_download_finish(media_size: int, download_path: str, ui_file_name: str):
@@ -233,12 +303,14 @@ async def _get_media_meta(
 
         if caption:
             caption = validate_title(caption)
-            app.set_caption_name(chat_id, message.media_group_id, caption)
+            media_group_id_str = str(message.media_group_id) if message.media_group_id is not None else None
+            app.set_caption_name(chat_id, media_group_id_str, caption)
             app.set_caption_entities(
-                chat_id, message.media_group_id, message.caption_entities
+                chat_id, media_group_id_str, message.caption_entities
             )
         else:
-            caption = app.get_caption_name(chat_id, message.media_group_id)
+            media_group_id_str = str(message.media_group_id) if message.media_group_id is not None else None
+            caption = app.get_caption_name(chat_id, media_group_id_str)
 
         if not file_name and message.photo:
             file_name = f"{message.photo.file_unique_id}"
@@ -301,7 +373,7 @@ async def download_task(
     """Download and Forward media"""
 
     download_status, file_name = await download_media(
-        client, message, app.media_types, app.file_formats, node
+        client, message, app.media_types, app.file_formats, node, app
     )
 
     if app.enable_download_txt and message.text and not message.media:
@@ -311,31 +383,37 @@ async def download_task(
         app.set_download_id(node, message.id, download_status)
 
     node.download_status[message.id] = download_status
+    
+    # 如果下载成功，清理download_result中的记录
+    if download_status == DownloadStatus.SuccessDownload:
+        from module.download_stat import clear_download_result
+        clear_download_result(node.chat_id, message.id)
 
     file_size = os.path.getsize(file_name) if file_name else 0
 
-    await upload_telegram_chat(
-        client,
-        node.upload_user if node.upload_user else client,
-        app,
-        node,
-        message,
-        download_status,
-        file_name,
-    )
+    # 云盘上传功能已禁用
+    # await upload_telegram_chat(
+    #     client,
+    #     node.upload_user if node.upload_user else client,
+    #     app,
+    #     node,
+    #     message,
+    #     download_status,
+    #     file_name,
+    # )
 
-    # rclone upload
-    if (
-        not node.upload_telegram_chat_id
-        and download_status is DownloadStatus.SuccessDownload
-    ):
-        ui_file_name = file_name
-        if app.hide_file_name:
-            ui_file_name = f"****{os.path.splitext(file_name)[-1]}"
-        if await app.upload_file(
-            file_name, update_cloud_upload_stat, (node, message.id, ui_file_name)
-        ):
-            node.upload_success_count += 1
+    # # rclone upload - 已禁用
+    # if (
+    #     not node.upload_telegram_chat_id
+    #     and download_status is DownloadStatus.SuccessDownload
+    # ):
+    #     ui_file_name = file_name
+    #     if app.hide_file_name:
+    #         ui_file_name = f"****{os.path.splitext(file_name)[-1]}"
+    #     if await app.upload_file(
+    #         file_name, update_cloud_upload_stat, (node, message.id, ui_file_name)
+    #     ):
+    #         node.upload_success_count += 1
 
     await report_bot_download_status(
         node.bot,
@@ -355,6 +433,7 @@ async def download_media(
     media_types: List[str],
     file_formats: dict,
     node: TaskNode,
+    app=None,
 ):
     """
     Download media from Telegram.
@@ -470,8 +549,24 @@ async def download_media(
                     f"{_t('file reference expired for 3 retries, download skipped.')}"
                 )
         except pyrogram.errors.exceptions.flood_420.FloodWait as wait_err:
-            await asyncio.sleep(wait_err.value)
-            logger.warning("Message[{}]: FlowWait {}", message.id, wait_err.value)
+            # FloodWait处理 - 等待指定时间+5秒
+            wait_time = wait_err.value
+            actual_wait = wait_time + 5  # 额外等待5秒确保安全
+            
+            logger.warning(
+                f"⏱️ FloodWait 错误:\n"
+                f"  消息ID: {message.id}\n"
+                f"  Telegram要求等待: {wait_time}秒\n"
+                f"  实际等待时间: {actual_wait}秒（+5秒缓冲）\n"
+                f"  重试次数: {retry + 1}/3"
+            )
+            
+            # 如果等待时间超过1小时，记录警告
+            if wait_time > 3600:
+                logger.error(f"⚠️ FloodWait时间过长: {wait_time//3600}小时{(wait_time%3600)//60}分钟")
+            
+            await asyncio.sleep(actual_wait)
+            logger.info(f"✅ FloodWait等待完成，继续下载消息[{message.id}]")
             _check_timeout(retry, message.id)
         except TypeError:
             # pylint: disable = C0301
@@ -484,12 +579,40 @@ async def download_media(
                 logger.error(
                     f"Message[{message.id}]: {_t('Timing out after 3 reties, download skipped.')}"
                 )
-        except Exception as e:
-            # pylint: disable = C0301
+        except (ConnectionError, OSError, asyncio.TimeoutError) as network_err:
+            # 网络相关异常 - 输出详细信息
+            error_name = type(network_err).__name__
             logger.error(
-                f"Message[{message.id}]: "
-                f"{_t('could not be downloaded due to following exception')}:\n[{e}].",
-                exc_info=True,
+                f"🌐 网络异常详情:\n"
+                f"  消息ID: {message.id}\n"
+                f"  异常类型: {error_name}\n"
+                f"  错误信息: {str(network_err)}\n"
+                f"  重试次数: {retry + 1}/3\n"
+                f"  文件信息: {ui_file_name if 'ui_file_name' in locals() else 'Unknown'}\n"
+                f"  媒体大小: {media_size if 'media_size' in locals() else 0} bytes",
+                exc_info=True
+            )
+            
+            if app and app.enable_network_monitor:
+                logger.info("🔄 网络监控已启用，将自动处理任务暂停和恢复")
+            
+            await asyncio.sleep(RETRY_TIME_OUT)
+            if _check_timeout(retry, message.id):
+                logger.error(
+                    f"❌ Message[{message.id}]: 网络异常重试3次后失败，跳过下载\n"
+                    f"  最终错误: {network_err}"
+                )
+        except Exception as e:
+            # 其他未知异常 - 输出完整堆栈
+            logger.error(
+                f"❌ 下载失败 - 未知异常:\n"
+                f"  消息ID: {message.id}\n"
+                f"  异常类型: {type(e).__name__}\n"
+                f"  错误信息: {str(e)}\n"
+                f"  文件信息: {ui_file_name if 'ui_file_name' in locals() else 'Unknown'}\n"
+                f"  聊天ID: {node.chat_id if node else 'Unknown'}\n"
+                f"  重试次数: {retry + 1}/3",
+                exc_info=True
             )
             break
 
@@ -506,14 +629,31 @@ def _check_config() -> bool:
     print_meta(logger)
     try:
         _load_config()
+        
+        # 创建日志目录
+        os.makedirs(app.log_file_path, exist_ok=True)
+        os.makedirs("logs", exist_ok=True)  # 为错误日志创建目录
+        
         logger.add(
             os.path.join(app.log_file_path, "tdl.log"),
             rotation="10 MB",
             retention="10 days",
             level=app.log_level,
         )
+        
+        logger.info(f"📝 日志配置完成:")
+        logger.info(f"  - 主日志: {os.path.join(app.log_file_path, 'tdl.log')}")
+        logger.info(f"  - 错误日志: logs/error_{{time}}.log")
+        logger.info(f"  - 日志级别: {app.log_level}")
+        
     except Exception as e:
-        logger.exception(f"load config error: {e}")
+        logger.error(
+            f"❌ 配置加载失败:\n"
+            f"  错误类型: {type(e).__name__}\n"
+            f"  错误信息: {str(e)}\n"
+            f"  配置文件: {CONFIG_NAME}",
+            exc_info=True
+        )
         return False
 
     return True
@@ -530,12 +670,42 @@ async def worker(client: pyrogram.client.Client):
             if node.is_stop_transmission:
                 continue
 
+            # 如果任务暂停，等待恢复
+            while node.is_task_paused() and not node.is_stop_transmission:
+                logger.info(f"Worker Task {node.task_id}: 任务已暂停，等待恢复...")
+                await asyncio.sleep(1)
+            
+            # 再次检查是否停止
+            if node.is_stop_transmission:
+                continue
+
             if node.client:
                 await download_task(node.client, message, node)
             else:
                 await download_task(client, message, node)
+        except (ConnectionError, OSError) as e:
+            # 网络连接错误，将任务重新放回队列
+            logger.error(
+                f"⚠️ Worker 网络错误:\n"
+                f"  错误类型: {type(e).__name__}\n"
+                f"  错误信息: {str(e)}\n"
+                f"  任务ID: {node.task_id if 'node' in locals() else 'Unknown'}\n"
+                f"  消息ID: {message.id if 'message' in locals() else 'Unknown'}",
+                exc_info=True
+            )
+            if 'item' in locals():
+                await queue.put(item)
+                logger.info(f"✅ 任务已重新加入队列，5秒后重试")
+            await asyncio.sleep(5)  # 等待5秒后继续
         except Exception as e:
-            logger.exception(f"{e}")
+            logger.error(
+                f"❌ Worker 未知错误:\n"
+                f"  错误类型: {type(e).__name__}\n"
+                f"  错误信息: {str(e)}\n"
+                f"  任务ID: {node.task_id if 'node' in locals() else 'Unknown'}\n"
+                f"  消息ID: {message.id if 'message' in locals() else 'Unknown'}",
+                exc_info=True
+            )
 
 
 async def download_chat_task(
@@ -565,17 +735,28 @@ async def download_chat_task(
             await add_download_task(message, node)
 
     async for message in messages_iter:  # type: ignore
+        # 检查任务是否停止或暂停
+        if node.is_stop_transmission:
+            break
+            
+        # 如果任务暂停，等待恢复
+        while node.is_task_paused() and not node.is_stop_transmission:
+            logger.info(f"Task {node.task_id}: 任务已暂停，等待恢复...")
+            await asyncio.sleep(1)
+        
         meta_data = MetaData()
 
         caption = message.caption
         if caption:
             caption = validate_title(caption)
-            app.set_caption_name(node.chat_id, message.media_group_id, caption)
+            media_group_id_str = str(message.media_group_id) if message.media_group_id is not None else None
+            app.set_caption_name(node.chat_id, media_group_id_str, caption)
             app.set_caption_entities(
-                node.chat_id, message.media_group_id, message.caption_entities
+                node.chat_id, media_group_id_str, message.caption_entities
             )
         else:
-            caption = app.get_caption_name(node.chat_id, message.media_group_id)
+            media_group_id_str = str(message.media_group_id) if message.media_group_id is not None else None
+            caption = app.get_caption_name(node.chat_id, media_group_id_str)
         set_meta_data(meta_data, message, caption)
 
         if app.need_skip_message(chat_download_config, message.id):
@@ -586,30 +767,54 @@ async def download_chat_task(
         else:
             node.download_status[message.id] = DownloadStatus.SkipDownload
             if message.media_group_id:
-                await upload_telegram_chat(
-                    client,
-                    node.upload_user,
-                    app,
-                    node,
-                    message,
-                    DownloadStatus.SkipDownload,
-                )
+                # 云盘上传功能已禁用
+                # await upload_telegram_chat(
+                #     client,
+                #     node.upload_user,
+                #     app,
+                #     node,
+                #     message,
+                #     DownloadStatus.SkipDownload,
+                # )
+                pass
 
     chat_download_config.need_check = True
     chat_download_config.total_task = node.total_task
     node.is_running = True
+    node.start_time = time.time()  # 记录任务开始时间
 
 
 async def download_all_chat(client: pyrogram.Client):
     """Download All chat"""
+    # 导入bot模块（如果使用bot模式）
+    from module.bot import _bot
+    
+    task_id = 1  # 从1开始分配任务ID
+    
     for key, value in app.chat_download_config.items():
+        if not value.enable:
+            continue
+            
         value.node = TaskNode(chat_id=key)
+        value.node.task_id = task_id
+        value.node.is_running = True  # 设置任务为运行中状态
+        
+        # 如果bot模式启用，添加到bot的任务管理中
+        if _bot and hasattr(_bot, 'task_node'):
+            _bot.task_node[task_id] = value.node
+            logger.info(f"添加任务到Bot管理: ID={task_id}, Chat={key}")
+        
+        task_id += 1
+        
         try:
             await download_chat_task(client, value, value.node)
         except Exception as e:
             logger.warning(f"Download {key} error: {e}")
         finally:
             value.need_check = True
+            # 任务完成后从bot中移除
+            if _bot and hasattr(_bot, 'task_node') and value.node.task_id in _bot.task_node:
+                _bot.task_node.pop(value.node.task_id, None)
 
 
 async def run_until_all_task_finish():
@@ -634,9 +839,41 @@ def _exec_loop():
 
 async def start_server(client: pyrogram.Client):
     """
-    Start the server using the provided client.
+    Start the server using the provided client with retry logic.
     """
-    await client.start()
+    max_retries = 3
+    retry_delay = 5
+    
+    for attempt in range(max_retries):
+        try:
+            await client.start()
+            logger.info("成功连接到 Telegram 服务器")
+            return
+        except pyrogram.errors.SecurityCheckMismatch as e:
+            logger.error(f"❌ 会话安全检查失败: {e}")
+            logger.info("🔄 尝试重新创建会话...")
+            
+            # 删除损坏的会话文件
+            session_file = f"sessions/{client.name}.session"
+            if os.path.exists(session_file):
+                os.remove(session_file)
+                logger.info(f"✅ 已删除损坏的会话文件: {session_file}")
+            
+            # 下次循环会重新创建会话
+            if attempt < max_retries - 1:
+                logger.info(f"等待 {retry_delay} 秒后重试...")
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error("无法修复会话问题")
+                raise
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"连接失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                logger.info(f"等待 {retry_delay} 秒后重试...")
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error(f"无法连接到 Telegram 服务器: {e}")
+                raise
 
 
 async def stop_server(client: pyrogram.Client):
@@ -666,22 +903,57 @@ def main():
         app.loop.run_until_complete(start_server(client))
         logger.success(_t("Successfully started (Press Ctrl+C to stop)"))
 
-        app.loop.create_task(download_all_chat(client))
-        for _ in range(app.max_download_task):
-            task = app.loop.create_task(worker(client))
-            tasks.append(task)
-
+        # 如果有bot_token，先启动bot
         if app.bot_token:
             app.loop.run_until_complete(
                 start_download_bot(app, client, add_download_task, download_chat_task)
             )
+        
+        # 然后再启动下载任务
+        app.loop.create_task(download_all_chat(client))
+        for _ in range(app.max_download_task):
+            task = app.loop.create_task(worker(client))
+            tasks.append(task)
+        
+        # 启动网络监控
+        app.loop.run_until_complete(app.start_network_monitor())
+        
         _exec_loop()
     except KeyboardInterrupt:
-        logger.info(_t("KeyboardInterrupt"))
+        logger.info("⌨️ 用户中断 (Ctrl+C)")
+    except pyrogram.errors.exceptions.bad_request_400.BadRequest as e:
+        logger.error(
+            f"❌ Telegram API 错误 (400 Bad Request):\n"
+            f"  错误信息: {str(e)}\n"
+            f"  可能原因: 消息已删除、权限不足或请求参数错误",
+            exc_info=True
+        )
+    except pyrogram.errors.exceptions.unauthorized_401.Unauthorized as e:
+        logger.error(
+            f"❌ 认证失败 (401 Unauthorized):\n"
+            f"  错误信息: {str(e)}\n"
+            f"  解决方案: 请检查 API ID/Hash 或重新登录",
+            exc_info=True
+        )
+    except pyrogram.errors.exceptions.forbidden_403.Forbidden as e:
+        logger.error(
+            f"❌ 访问被拒绝 (403 Forbidden):\n"
+            f"  错误信息: {str(e)}\n"
+            f"  可能原因: 账号被限制或没有访问权限",
+            exc_info=True
+        )
     except Exception as e:
-        logger.exception("{}", e)
+        logger.error(
+            f"❌ 程序异常退出:\n"
+            f"  异常类型: {type(e).__name__}\n"
+            f"  错误信息: {str(e)}\n"
+            f"  建议: 请将此错误信息提交到 GitHub Issues",
+            exc_info=True
+        )
     finally:
         app.is_running = False
+        # 停止网络监控
+        app.loop.run_until_complete(app.stop_network_monitor())
         if app.bot_token:
             app.loop.run_until_complete(stop_download_bot())
         app.loop.run_until_complete(stop_server(client))

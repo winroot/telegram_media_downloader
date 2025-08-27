@@ -166,6 +166,8 @@ class TaskNode:
         self.client = None
         self.upload_success_count: int = 0
         self.is_stop_transmission = False
+        self.is_paused = False  # 暂停状态
+        self.is_network_paused = False  # 网络断线暂停状态
         self.media_group_ids: dict = {}
         self.download_status: dict = {}
         self.upload_status: dict = {}
@@ -196,6 +198,30 @@ class TaskNode:
         """Stop task"""
         self.is_stop_transmission = True
 
+    def pause_task(self):
+        """暂停任务"""
+        self.is_paused = True
+
+    def resume_task(self):
+        """恢复任务"""
+        self.is_paused = False
+
+    def is_task_paused(self):
+        """检查任务是否暂停"""
+        return self.is_paused or self.is_network_paused
+    
+    def pause_for_network(self):
+        """因网络问题暂停任务"""
+        self.is_network_paused = True
+    
+    def resume_from_network_pause(self):
+        """从网络暂停中恢复任务"""
+        self.is_network_paused = False
+    
+    def is_network_paused_only(self):
+        """检查是否仅因网络问题暂停"""
+        return self.is_network_paused and not self.is_paused
+
     def stat(self, status: DownloadStatus):
         """
         Updates the download status of the task.
@@ -209,6 +235,14 @@ class TaskNode:
         self.total_download_task += 1
         if status is DownloadStatus.SuccessDownload:
             self.success_download_task += 1
+            # 保存最后下载的文件信息（用于显示）
+            self.last_download_file = getattr(self, 'current_download_file', None)
+            self.last_file_size = getattr(self, 'current_file_size', 0)
+            # 清除当前文件下载信息
+            self.current_download_file = None
+            self.current_file_size = 0
+            self.current_downloaded = 0
+            self.download_speed = 0
         elif status is DownloadStatus.SkipDownload:
             self.skip_download_task += 1
         else:
@@ -224,6 +258,33 @@ class TaskNode:
         else:
             self.failed_forward_task += count
 
+    def has_significant_progress(self):
+        """检查是否有显著的进度变化（避免频繁更新）"""
+        if not hasattr(self, 'last_reported_progress'):
+            self.last_reported_progress = 0
+            return True
+        
+        # 计算当前进度百分比
+        if self.total_task > 0:
+            current_progress = (self.success_download_count + self.failed_download_count + 
+                              self.skip_download_count) / self.total_task
+        else:
+            current_progress = 0
+        
+        # 如果进度变化超过5%或任务完成，则认为有显著变化
+        progress_change = abs(current_progress - self.last_reported_progress)
+        if progress_change > 0.05 or self.is_finish():
+            self.last_reported_progress = current_progress
+            return True
+        
+        # 检查时间间隔（至少60秒更新一次）
+        cur_time = time.time()
+        if cur_time - self.last_reply_time > 60:
+            self.last_reported_progress = current_progress
+            return True
+        
+        return False
+    
     def can_reply(self):
         """
         Checks if the bot can reply to a message
@@ -231,11 +292,44 @@ class TaskNode:
 
         Returns:
             True if the time elapsed since
-                the last reply is greater than 1 second, False otherwise.
+                the last reply is greater than the minimum interval, False otherwise.
         """
         cur_time = time.time()
-        if cur_time - self.last_reply_time > 1.0:
+        
+        # 检查是否在FloodWait期间
+        if hasattr(self, 'floodwait_until') and cur_time < self.floodwait_until:
+            return False
+        
+        # 使用指数退避的最小间隔（如果设置了）
+        if hasattr(self, 'min_update_interval'):
+            min_interval = self.min_update_interval
+        else:
+            # 动态调整更新间隔，避免FloodWait
+            min_interval = 5.0  # 默认5秒
+            
+            # 根据任务规模调整间隔
+            if self.total_download_task > 1000:
+                min_interval = 30.0  # 超大任务30秒
+            elif self.total_download_task > 500:
+                min_interval = 20.0  # 大任务20秒
+            elif self.total_download_task > 100:
+                min_interval = 10.0  # 中等任务10秒
+            elif self.total_download_task > 50:
+                min_interval = 7.0  # 小任务7秒
+            
+            # 如果最近有FloodWait，增加间隔
+            if hasattr(self, 'floodwait_until'):
+                min_interval = max(min_interval, 30.0)  # FloodWait后至少30秒
+        
+        if cur_time - self.last_reply_time > min_interval:
             self.last_reply_time = cur_time
+            
+            # 成功回复后重置FloodWait计数
+            if hasattr(self, 'floodwait_count'):
+                self.floodwait_count = 0
+                if hasattr(self, 'min_update_interval'):
+                    del self.min_update_interval  # 恢复正常间隔
+            
             return True
 
         return False
@@ -408,6 +502,21 @@ class Application:
         self.date_format: str = "%Y_%m"
         self.drop_no_audio_video: bool = False
         self.enable_download_txt: bool = False
+
+        # FloodWait 配置
+        self.download_floodwait_buffer: int = 2  # 下载FloodWait额外等待时间(秒)
+        self.upload_floodwait_multiplier: float = 2.0  # 上传FloodWait倍数
+        self.upload_floodwait_buffer: int = 5  # 上传FloodWait额外等待时间(秒)
+
+        # 网络监控配置
+        self.enable_network_monitor: bool = True  # 是否启用网络监控
+        self.network_check_interval: int = 30  # 网络检查间隔(秒)
+        self.network_check_host: str = "1.1.1.1"  # 网络检查主机
+        self.network_timeout: int = 5  # 网络检查超时时间(秒)
+        self.network_is_available: bool = True  # 当前网络状态
+        self.network_paused_tasks: set = set()  # 因网络问题暂停的任务集合
+        self.network_monitor_task = None  # 网络监控任务
+        self.bot_instance = None  # Bot实例引用
 
         self.forward_limit_call = LimitCall(max_limit_call_times=33)
 
@@ -669,24 +778,45 @@ class Application:
         """Upload file"""
 
         if not self.cloud_drive_config.enable_upload_file:
+            logger.debug(f"⛔ 云盘上传未启用: {local_file_path}")
             return False
 
         ret: bool = False
-        if self.cloud_drive_config.upload_adapter == "rclone":
-            ret = await CloudDrive.rclone_upload_file(
-                self.cloud_drive_config,
-                self.save_path,
-                local_file_path,
-                progress_callback,
-                progress_args,
+        try:
+            logger.info(f"🌩️ 开始上传文件到云盘: {local_file_path}")
+            
+            if self.cloud_drive_config.upload_adapter == "rclone":
+                ret = await CloudDrive.rclone_upload_file(
+                    self.cloud_drive_config,
+                    self.save_path,
+                    local_file_path,
+                    progress_callback,
+                    progress_args,
+                )
+            elif self.cloud_drive_config.upload_adapter == "aligo":
+                ret = await self.loop.run_in_executor(
+                    self.executor,
+                    CloudDrive.aligo_upload_file(
+                        self.cloud_drive_config, self.save_path, local_file_path
+                    ),
+                )
+            else:
+                logger.error(f"❌ 未知的上传适配器: {self.cloud_drive_config.upload_adapter}")
+                
+            if ret:
+                logger.success(f"✅ 文件上传成功: {local_file_path}")
+            else:
+                logger.warning(f"⚠️ 文件上传失败: {local_file_path}")
+                
+        except Exception as e:
+            logger.error(
+                f"❌ 云盘上传异常:\n"
+                f"  文件: {local_file_path}\n"
+                f"  适配器: {self.cloud_drive_config.upload_adapter}\n"
+                f"  错误: {str(e)}",
+                exc_info=True
             )
-        elif self.cloud_drive_config.upload_adapter == "aligo":
-            ret = await self.loop.run_in_executor(
-                self.executor,
-                CloudDrive.aligo_upload_file(
-                    self.cloud_drive_config, self.save_path, local_file_path
-                ),
-            )
+            ret = False
 
         return ret
 
@@ -796,8 +926,27 @@ class Application:
             bool: The result of executing the filter.
         """
         if download_config.download_filter:
-            self.download_filter.set_meta_data(meta_data)
-            return self.download_filter.exec(download_config.download_filter)
+            try:
+                self.download_filter.set_meta_data(meta_data)
+                result = self.download_filter.exec(download_config.download_filter)
+                
+                if not result:
+                    logger.debug(
+                        f"🔍 消息被过滤器跳过:\n"
+                        f"  消息ID: {meta_data.message_id}\n"
+                        f"  过滤器: {download_config.download_filter}"
+                    )
+                return result
+            except Exception as e:
+                logger.error(
+                    f"❌ 执行过滤器失败:\n"
+                    f"  过滤器: {download_config.download_filter}\n"
+                    f"  错误: {str(e)}\n"
+                    f"  消息ID: {meta_data.message_id}",
+                    exc_info=True
+                )
+                # 过滤器错误时默认通过
+                return True
 
         return True
 
@@ -994,3 +1143,259 @@ class Application:
         self.chat_download_config[node.chat_id].last_read_message_id = max(
             self.chat_download_config[node.chat_id].last_read_message_id, message_id
         )
+    
+    def set_bot_instance(self, bot):
+        """设置bot实例引用"""
+        self.bot_instance = bot
+    
+    # FloodWait 配置管理方法
+    def get_floodwait_settings(self) -> dict:
+        """获取当前FloodWait设置"""
+        return {
+            "download_buffer": self.download_floodwait_buffer,
+            "upload_multiplier": self.upload_floodwait_multiplier, 
+            "upload_buffer": self.upload_floodwait_buffer
+        }
+    
+    def set_download_floodwait_buffer(self, buffer_seconds: int) -> bool:
+        """设置下载FloodWait缓冲时间"""
+        if buffer_seconds < 0 or buffer_seconds > 300:
+            return False
+        self.download_floodwait_buffer = buffer_seconds
+        return True
+    
+    def set_upload_floodwait_multiplier(self, multiplier: float) -> bool:
+        """设置上传FloodWait倍数"""
+        if multiplier < 1.0 or multiplier > 10.0:
+            return False
+        self.upload_floodwait_multiplier = multiplier
+        return True
+        
+    def set_upload_floodwait_buffer(self, buffer_seconds: int) -> bool:
+        """设置上传FloodWait缓冲时间"""  
+        if buffer_seconds < 0 or buffer_seconds > 300:
+            return False
+        self.upload_floodwait_buffer = buffer_seconds
+        return True
+    
+    def auto_adjust_download_floodwait(self, telegram_wait_time: int) -> int:
+        """
+        根据Telegram要求的等待时间自动调整下载FloodWait设置
+        
+        Args:
+            telegram_wait_time: Telegram返回的等待时间(秒)
+            
+        Returns:
+            实际等待时间(秒)
+        """
+        # 自动增加1秒缓冲时间
+        old_buffer = self.download_floodwait_buffer
+        new_buffer = min(old_buffer + 1, 60)  # 最大不超过60秒
+        self.download_floodwait_buffer = new_buffer
+        
+        # 计算实际等待时间
+        actual_wait_time = telegram_wait_time + new_buffer
+        
+        from loguru import logger
+        logger.info(
+            "FloodWait自动调整 - 下载缓冲: {}s → {}s, 等待: {}s + {}s = {}s",
+            old_buffer, new_buffer, telegram_wait_time, new_buffer, actual_wait_time
+        )
+        
+        return actual_wait_time
+    
+    def auto_adjust_upload_floodwait(self, telegram_wait_time: int) -> int:
+        """
+        根据Telegram要求的等待时间自动调整上传FloodWait设置
+        
+        Args:
+            telegram_wait_time: Telegram返回的等待时间(秒)
+            
+        Returns:
+            实际等待时间(秒)  
+        """
+        # 自动增加1秒缓冲时间
+        old_buffer = self.upload_floodwait_buffer
+        new_buffer = min(old_buffer + 1, 120)  # 最大不超过120秒
+        self.upload_floodwait_buffer = new_buffer
+        
+        # 计算实际等待时间 
+        actual_wait_time = int(telegram_wait_time * self.upload_floodwait_multiplier) + new_buffer
+        
+        from loguru import logger
+        logger.info(
+            "FloodWait自动调整 - 上传缓冲: {}s → {}s, 等待: ({}s × {}) + {}s = {}s",
+            old_buffer, new_buffer, telegram_wait_time, self.upload_floodwait_multiplier, 
+            new_buffer, actual_wait_time
+        )
+        
+        return actual_wait_time
+
+    async def check_network_connectivity(self) -> bool:
+        """
+        检查网络连通性
+        
+        Returns:
+            bool: 网络是否可用
+        """
+        try:
+            # 使用ping命令检查网络连通性
+            # macOS 使用毫秒作为 -W 参数
+            process = await asyncio.create_subprocess_exec(
+                'ping', '-c', '1', '-W', str(self.network_timeout * 1000), 
+                self.network_check_host,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            # 设置超时
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(), 
+                    timeout=self.network_timeout + 1
+                )
+                return process.returncode == 0
+            except asyncio.TimeoutError:
+                logger.debug(f"ping {self.network_check_host} 超时")
+                return False
+                
+        except FileNotFoundError:
+            # ping 命令不存在，尝试使用 socket 连接
+            logger.debug("ping 命令不可用，尝试 socket 连接")
+            try:
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(self.network_timeout)
+                result = sock.connect_ex((self.network_check_host, 443))
+                sock.close()
+                return result == 0
+            except Exception as e:
+                logger.debug(f"socket 连接检查失败: {e}")
+                return False
+        except Exception as e:
+            logger.debug(f"网络检查异常: {e}")
+            return False
+    
+    async def start_network_monitor(self):
+        """启动网络监控任务"""
+        if not self.enable_network_monitor:
+            return
+            
+        logger.info(f"启动网络监控 - 检查间隔: {self.network_check_interval}秒, 目标主机: {self.network_check_host}")
+        
+        self.network_monitor_task = asyncio.create_task(self._network_monitor_loop())
+    
+    async def stop_network_monitor(self):
+        """停止网络监控任务"""
+        if self.network_monitor_task:
+            self.network_monitor_task.cancel()
+            try:
+                await self.network_monitor_task
+            except asyncio.CancelledError:
+                pass
+            logger.info("网络监控已停止")
+    
+    async def _network_monitor_loop(self):
+        """网络监控循环"""
+        while self.is_running:
+            try:
+                # 检查网络连通性
+                is_available = await self.check_network_connectivity()
+                
+                if is_available != self.network_is_available:
+                    if is_available:
+                        logger.success(
+                            f"🟢 网络已恢复\n"
+                            f"  检查主机: {self.network_check_host}\n"
+                            f"  恢复时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        )
+                        await self._resume_network_paused_tasks()
+                    else:
+                        logger.warning(
+                            f"🔴 检测到网络断线\n"
+                            f"  检查主机: {self.network_check_host}\n"
+                            f"  断线时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                            f"  当前任务数: {len(self.chat_download_config)}"
+                        )
+                        await self._pause_tasks_for_network()
+                    
+                    self.network_is_available = is_available
+                
+                await asyncio.sleep(self.network_check_interval)
+                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"网络监控循环异常: {e}")
+                await asyncio.sleep(self.network_check_interval)
+    
+    async def _pause_tasks_for_network(self):
+        """因网络问题暂停所有任务"""
+        try:
+            # 暂停所有chat_download_config中的任务
+            paused_count = 0
+            for chat_id, config in self.chat_download_config.items():
+                if hasattr(config, 'node') and config.node and config.node.is_running:
+                    if not config.node.is_task_paused():
+                        config.node.pause_for_network()
+                        self.network_paused_tasks.add(chat_id)
+                        paused_count += 1
+                        logger.info(f"因网络断线暂停任务: {chat_id}")
+            
+            # 如果有bot实例，暂停bot管理的任务
+            if self.bot_instance and hasattr(self.bot_instance, 'task_node'):
+                for task_id, task_node in self.bot_instance.task_node.items():
+                    if task_node.is_running and not task_node.is_task_paused():
+                        task_node.pause_for_network()
+                        self.network_paused_tasks.add(f"bot_{task_id}")
+                        paused_count += 1
+                        logger.info(f"因网络断线暂停Bot任务: {task_id}")
+                
+            if paused_count > 0:
+                logger.warning(f"🔴 网络断线，已暂停 {paused_count} 个下载任务")
+        except Exception as e:
+            logger.error(f"网络暂停任务失败: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    async def _resume_network_paused_tasks(self):
+        """恢复因网络问题暂停的任务"""
+        try:
+            resumed_count = 0
+            
+            # 恢复所有暂停的任务
+            for task_key in self.network_paused_tasks.copy():
+                if isinstance(task_key, str) and task_key.startswith("bot_"):
+                    # Bot管理的任务
+                    if self.bot_instance and hasattr(self.bot_instance, 'task_node'):
+                        task_id = int(task_key[4:])  # 去掉"bot_"前缀
+                        task_node = self.bot_instance.task_node.get(task_id)
+                        if task_node and task_node.is_network_paused:
+                            task_node.resume_from_network_pause()
+                            resumed_count += 1
+                            logger.info(f"网络恢复，自动恢复Bot任务: {task_id}")
+                else:
+                    # 普通下载任务
+                    config = self.chat_download_config.get(task_key)
+                    if config and hasattr(config, 'node') and config.node:
+                        if config.node.is_network_paused:
+                            config.node.resume_from_network_pause()
+                            resumed_count += 1
+                            logger.info(f"网络恢复，自动恢复任务: {task_key}")
+            
+            self.network_paused_tasks.clear()
+            
+            if resumed_count > 0:
+                logger.success(f"🟢 网络已恢复，已恢复 {resumed_count} 个下载任务")
+        except Exception as e:
+            logger.error(f"网络恢复任务失败: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def is_network_available(self) -> bool:
+        """获取当前网络状态"""
+        return self.network_is_available
+    
+    def get_network_paused_tasks(self) -> set:
+        """获取因网络问题暂停的任务集合"""
+        return self.network_paused_tasks.copy()
