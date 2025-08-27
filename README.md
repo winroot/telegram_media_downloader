@@ -1,25 +1,21 @@
 
-<h1 align="center">Telegram Media Downloader</h1>
+<h1 align="center">Telegram Media Downloader (优化版)</h1>
 
 <p align="center">
-<a href="https://github.com/tangyoha/telegram_media_downloader/actions"><img alt="Unittest" src="https://github.com/tangyoha/telegram_media_downloader/workflows/Unittest/badge.svg"></a>
-<a href="https://codecov.io/gh/tangyoha/telegram_media_downloader"><img alt="Coverage Status" src="https://codecov.io/gh/tangyoha/telegram_media_downloader/branch/master/graph/badge.svg"></a>
-<a href="https://github.com/tangyoha/telegram_media_downloader/blob/master/LICENSE"><img alt="License: MIT" src="https://black.readthedocs.io/en/stable/_static/license.svg"></a>
+<a href="https://github.com/winroot/telegram_media_downloader/blob/master/LICENSE"><img alt="License: MIT" src="https://black.readthedocs.io/en/stable/_static/license.svg"></a>
 <a href="https://github.com/python/black"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-000000.svg"></a>
-<a href="https://github.com/tangyoha/telegram_media_downloader/releases">
-<img alt="Code style: black" src="https://img.shields.io/github/v/release/tangyoha/telegram_media_downloader?display_name=tag"></a>
 </p>
 
 <h3 align="center">
   <a href="./README_CN.md">中文</a><span> · </span>
-  <a href="https://github.com/tangyoha/telegram_media_downloader/discussions/categories/ideas">Feature request</a>
+  <a href="https://github.com/winroot/telegram_media_downloader/issues">Report a bug</a>
   <span> · </span>
-  <a href="https://github.com/tangyoha/telegram_media_downloader/issues">Report a bug</a>
+  <a href="https://github.com/winroot/telegram_media_downloader/discussions">Discussions</a>
   <span> · </span>
-  Support: <a href="https://github.com/tangyoha/telegram_media_downloader/discussions">Discussions</a>
-  <span> & </span>
-  <a href="https://t.me/TeegramMediaDownload">Telegram Community</a>
+  <a href="https://github.com/tangyoha/telegram_media_downloader">Original Project</a>
 </h3>
+
+> 📢 **此版本基于 [tangyoha/telegram_media_downloader](https://github.com/tangyoha/telegram_media_downloader) 进行优化和增强**
 
 ## Overview
 > Support two default running
@@ -54,6 +50,31 @@
 ### Version release plan
 
 * [v2.2.0](https://github.com/tangyoha/telegram_media_downloader/issues/2)
+
+## 🚀 Optimizations (优化版)
+
+This fork includes several important optimizations and bug fixes:
+
+### Key Fixes
+- ✅ Fixed `/task_info` command not showing download progress
+- ✅ Fixed memory leak from uncleaned download queue
+- ✅ Fixed Bot commands not appearing in Telegram menu
+- ✅ Automatic FloodWait error handling (wait time + 5s buffer)
+
+### New Features  
+- 🔄 Hot reload system (`/reload` command) - update code without restart
+- 📡 Network monitoring and auto-recovery
+- 📊 Tiered logging system (errors, warnings, full logs, FloodWait-specific)
+- 🎯 Enhanced task progress display (progress bars, speed, time remaining)
+
+### Performance Improvements
+- ⚡ Removed dynamic message updates to reduce API calls
+- ⚡ Optimized memory management with automatic cleanup
+- ⚡ Better task queue management
+
+For detailed documentation, see:
+- [CLAUDE.md](./CLAUDE.md) - Complete development guide
+- [OPTIMIZATIONS.md](./OPTIMIZATIONS.md) - All optimizations explained
 
 ## Installation
 
@@ -279,13 +300,3 @@ Want to file a bug, contribute some code, or improve documentation? Excellent! R
 ### Code of Conduct
 
 Help us keep Telegram Media Downloader open and inclusive. Please read and follow our [Code of Conduct](https://github.com/tangyoha/telegram_media_downloader/blob/master/CODE_OF_CONDUCT.md).
-
-
-### Sponsor
-
-[PayPal](https://paypal.me/tangyoha?country.x=C2&locale.x=zh_XC)
-
-<p>
-<img alt="Code style: black" style="width:30%" src="./screenshot/alipay.JPG">
-<img alt="Code style: black" style="width:30%" src="./screenshot/wechat.JPG">
-</p>
