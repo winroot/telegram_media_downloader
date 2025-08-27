@@ -67,6 +67,7 @@ TODO.md
 log/
 temp/
 config.yaml
+config_副本.yaml
 data.yaml
 *.scss
 *.css.map
