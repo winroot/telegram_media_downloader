@@ -1,302 +1,161 @@
-
-<h1 align="center">Telegram Media Downloader (优化版)</h1>
+# Telegram Media Downloader (Enhanced Version)
 
 <p align="center">
 <a href="https://github.com/winroot/telegram_media_downloader/blob/master/LICENSE"><img alt="License: MIT" src="https://black.readthedocs.io/en/stable/_static/license.svg"></a>
 <a href="https://github.com/python/black"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-000000.svg"></a>
+<a href="https://claude.ai/code"><img alt="Built with: Claude Code" src="https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet"></a>
 </p>
 
 <h3 align="center">
-  <a href="./README_CN.md">中文</a><span> · </span>
-  <a href="https://github.com/winroot/telegram_media_downloader/issues">Report a bug</a>
-  <span> · </span>
+  <a href="./README_CN.md">中文</a> · 
+  <a href="https://github.com/winroot/telegram_media_downloader/issues">Report a bug</a> · 
   <a href="https://github.com/winroot/telegram_media_downloader/discussions">Discussions</a>
-  <span> · </span>
-  <a href="https://github.com/tangyoha/telegram_media_downloader">Original Project</a>
 </h3>
 
-> 📢 **此版本基于 [tangyoha/telegram_media_downloader](https://github.com/tangyoha/telegram_media_downloader) 进行优化和增强**
+> 🚀 **Enhanced fork of [tangyoha/telegram_media_downloader](https://github.com/tangyoha/telegram_media_downloader) developed with Claude Code**
 
-## Overview
-> Support two default running
+## ✨ About This Fork
 
-* The robot is running, and the command `download` or `forward` is issued from the robot
+This is an optimized version of the Telegram Media Downloader, developed and enhanced using **[Claude Code](https://claude.ai/code)** - Anthropic's AI-powered development assistant. All optimizations, bug fixes, and new features were implemented through collaborative development with Claude.
 
-* Download as a one-time download tool
+## 🎯 Key Improvements
 
-### UI
+### Fixed Critical Issues
+- ✅ `/task_info` command now correctly shows download progress
+- ✅ Fixed memory leak from uncleaned download queue  
+- ✅ Bot commands properly registered in Telegram menu
+- ✅ Automatic FloodWait error handling with smart retry
 
-#### Web page
+### New Features
+- 🔄 **Hot Reload** - Update code without restarting (`/reload`)
+- 📊 **Advanced Progress Display** - Progress bars, speed, ETA
+- 📡 **Network Monitoring** - Auto-recovery on connection loss
+- 🗂️ **Smart Logging** - Tiered logs for errors, warnings, FloodWait
 
-> After running, open a browser and visit `localhost:5000`
-> If it is a remote machine, you need to configure web_host: 0.0.0.0
+### Performance Optimizations
+- ⚡ Reduced API calls by removing dynamic updates
+- ⚡ Automatic cleanup of completed downloads
+- ⚡ Optimized task queue management
+- ⚡ Better memory management
 
+## 📱 Bot Commands
 
-<img alt="Code style: black" style="width:100%; high:60%;" src="./screenshot/web_ui.gif"/>
+Our enhanced version includes these bot commands:
 
-### Robot
+| Command | Description |
+|---------|------------|
+| `/start` | Start the bot and show welcome message |
+| `/help` | Display help information |
+| `/download` | Start downloading from a chat/channel |
+| `/forward` | Forward messages to another chat |
+| `/cancel_all` | Cancel all active downloads |
+| `/cancel_download [ID]` | Cancel specific download task |
+| `/task_info` | Show detailed progress for active downloads |
+| `/pause_download [ID]` | Pause a specific download |
+| `/resume_download [ID]` | Resume a paused download |
+| `/reload` | Hot reload code without restart |
+| `/network_status` | Check network monitoring status |
+| `/analyze_logs` | Analyze log files for issues |
 
-> Need to configure bot_token, please refer to [Documentation](https://github.com/tangyoha/telegram_media_downloader/wiki/How-to-Download-Using-Robots)
+## 🚀 Quick Start
 
-<img alt="Code style: black" style="width:60%; high:30%; " src="./screenshot/bot.gif"/>
+### Installation
 
-### Support
-
-| Category             | Support                                          |
-| -------------------- | ------------------------------------------------ |
-| Language             | `Python 3.7` and above                           |
-| Download media types | audio, document, photo, video, video_note, voice |
-
-### Version release plan
-
-* [v2.2.0](https://github.com/tangyoha/telegram_media_downloader/issues/2)
-
-## 🚀 Optimizations (优化版)
-
-This fork includes several important optimizations and bug fixes:
-
-### Key Fixes
-- ✅ Fixed `/task_info` command not showing download progress
-- ✅ Fixed memory leak from uncleaned download queue
-- ✅ Fixed Bot commands not appearing in Telegram menu
-- ✅ Automatic FloodWait error handling (wait time + 5s buffer)
-
-### New Features  
-- 🔄 Hot reload system (`/reload` command) - update code without restart
-- 📡 Network monitoring and auto-recovery
-- 📊 Tiered logging system (errors, warnings, full logs, FloodWait-specific)
-- 🎯 Enhanced task progress display (progress bars, speed, time remaining)
-
-### Performance Improvements
-- ⚡ Removed dynamic message updates to reduce API calls
-- ⚡ Optimized memory management with automatic cleanup
-- ⚡ Better task queue management
-
-For detailed documentation, see:
-- [CLAUDE.md](./CLAUDE.md) - Complete development guide
-- [OPTIMIZATIONS.md](./OPTIMIZATIONS.md) - All optimizations explained
-
-## Installation
-
-For *nix os distributions with `make` availability
-
-```sh
-git clone https://github.com/tangyoha/telegram_media_downloader.git
+```bash
+# Clone this enhanced version
+git clone https://github.com/winroot/telegram_media_downloader.git
 cd telegram_media_downloader
-make install
-```
 
-For Windows which doesn't have `make` inbuilt
-
-```sh
-git clone https://github.com/tangyoha/telegram_media_downloader.git
-cd telegram_media_downloader
+# Install dependencies
 pip3 install -r requirements.txt
 ```
 
-## Docker
-> For more detailed installation tutorial, please check the wiki
+### Configuration
 
-Make sure you have **docker** and **docker-compose** installed
-```sh
-docker pull tangyoha/telegram_media_downloader:latest
-mkdir -p ~/app && mkdir -p ~/app/log/ && cd ~/app
-wget https://raw.githubusercontent.com/tangyoha/telegram_media_downloader/master/docker-compose.yaml -O docker-compose.yaml
-wget https://raw.githubusercontent.com/tangyoha/telegram_media_downloader/master/config.yaml -O config.yaml
-wget https://raw.githubusercontent.com/tangyoha/telegram_media_downloader/master/data.yaml -O data.yaml
-# vi config.yaml and docker-compose.yaml
-vi config.yaml
+1. Get your Telegram API credentials from [my.telegram.org](https://my.telegram.org/apps)
+2. Configure `config.yaml` with your API keys and bot token
+3. Set your download preferences and chat IDs
 
-# The first time you need to start the foreground
-# enter your phone number and code, then exit(ctrl + c)
-docker-compose run --rm telegram_media_downloader
+### Running
 
-# After performing the above operations, all subsequent startups will start in the background
-docker-compose up -d
-
-# Upgrade
-docker pull tangyoha/telegram_media_downloader:latest
-cd ~/app
-docker-compose down
-docker-compose up -d
+```bash
+python3 media_downloader.py
 ```
 
-## Upgrade installation
+### Web Interface
 
-```sh
-cd telegram_media_downloader
-pip3 install -r requirements.txt
-```
+Open browser and visit `http://localhost:5000` (configure `web_host: 0.0.0.0` for remote access)
 
-## Configuration
-
-All the configurations are  passed to the Telegram Media Downloader via `config.yaml` file.
-
-**Getting your API Keys:**
-The very first step requires you to obtain a valid Telegram API key (API id/hash pair):
-
-1. Visit  [https://my.telegram.org/apps](https://my.telegram.org/apps)  and log in with your Telegram Account.
-2. Fill out the form to register a new Telegram application.
-3. Done! The API key consists of two parts:  **api_id**  and  **api_hash**.
-
-**Getting chat id:**
-
-**1. Using web telegram:**
-
-1. Open <https://web.telegram.org/?legacy=1#/im>
-
-2. Now go to the chat/channel and you will see the URL as something like
-   - `https://web.telegram.org/?legacy=1#/im?p=u853521067_2449618633394` here `853521067` is the chat id.
-   - `https://web.telegram.org/?legacy=1#/im?p=@somename` here `somename` is the chat id.
-   - `https://web.telegram.org/?legacy=1#/im?p=s1301254321_6925449697188775560` here take `1301254321` and add `-100` to the start of the id => `-1001301254321`.
-   - `https://web.telegram.org/?legacy=1#/im?p=c1301254321_6925449697188775560` here take `1301254321` and add `-100` to the start of the id => `-1001301254321`.
-
-**2. Using bot:**
-
-1. Use [@username_to_id_bot](https://t.me/username_to_id_bot) to get the chat_id of
-    - almost any telegram user: send username to the bot or just forward their message to the bot
-    - any chat: send chat username or copy and send its joinchat link to the bot
-    - public or private channel: same as chats, just copy and send to the bot
-    - id of any telegram bot
-
-### config.yaml
+## 📋 Configuration Example
 
 ```yaml
 api_hash: your_api_hash
 api_id: your_api_id
+bot_token: your_bot_token  # Optional, for bot commands
+
 chat:
-- chat_id: telegram_chat_id
+- chat_id: -1001234567890
   last_read_message_id: 0
-  download_filter: message_date >= 2022-12-01 00:00:00 and message_date <= 2023-01-17 00:00:00
-- chat_id: telegram_chat_id_2
-  last_read_message_id: 0
-# note we remove ids_to_retry to data.yaml
-ids_to_retry: []
+  download_filter: message_date >= 2024-01-01 00:00:00
+
 media_types:
-- audio
-- document
 - photo
 - video
-- voice
-- animation #gif
-file_formats:
-  audio:
-  - all
-  document:
-  - pdf
-  - epub
-  video:
-  - mp4
-save_path: D:\telegram_media_downloader
-file_path_prefix:
-- chat_title
-- media_datetime
-upload_drive:
-  # required
-  enable_upload_file: true
-  # required
-  remote_dir: drive:/telegram
-  # required
-  upload_adapter: rclone
-  # option,when config upload_adapter rclone then this config are required
-  rclone_path: D:\rclone\rclone.exe
-  # option
-  before_upload_file_zip: True
-  # option
-  after_upload_file_delete: True
-hide_file_name: true
-file_name_prefix:
-- message_id
-- file_name
-file_name_prefix_split: ' - '
+- document
+
+save_path: /path/to/downloads
 max_download_task: 5
-web_host: 127.0.0.1
-web_port: 5000
-language: EN
-web_login_secret: 123
-allowed_user_ids:
-- 'me'
-date_format: '%Y_%m'
-enable_download_txt: false
 ```
 
-- **api_hash**  - The api_hash you got from telegram apps
-- **api_id** - The api_id you got from telegram apps
-- **bot_token** - Your bot token
-- **chat** - Chat list
-  - `chat_id` -  The id of the chat/channel you want to download media. Which you get from the above-mentioned steps.
-  - `download_filter` - Download filter, see [How to use Filter](https://github.com/tangyoha/telegram_media_downloader/wiki/How-to-use-Filter)
-  - `last_read_message_id` - If it is the first time you are going to read the channel let it be `0` or if you have already used this script to download media it will have some numbers which are auto-updated after the scripts successful execution. Don't change it.
-  - `ids_to_retry` - `Leave it as it is.` This is used by the downloader script to keep track of all skipped downloads so that it can be downloaded during the next execution of the script.
-- **media_types** - Type of media to download, you can update which type of media you want to download it can be one or any of the available types.
-- **file_formats** - File types to download for supported media types which are `audio`, `document` and `video`. Default format is `all`, downloads all files.
-- **save_path** - The root directory where you want to store downloaded files.
-- **file_path_prefix** - Store file subfolders, the order of the list is not fixed, can be randomly combined.
-  - `chat_title`      - Channel or group title, it will be chat id if not exist title.
-  - `media_datetime`  - Media date.
-  - `media_type`      - Media type, also see `media_types`.
-- **upload_drive** - You can upload file to cloud drive.
-  - `enable_upload_file` - Enable upload file, default `false`.
-  - `remote_dir` - Where you upload, like `drive_id/drive_name`.
-  - `upload_adapter` - Upload file adapter, which can be `rclone`, `aligo`. If it is `rclone`, it supports all `rclone` servers that support uploading. If it is `aligo`, it supports uploading `Ali cloud disk`.
-  - `rclone_path` - RClone exe path, see [How to use rclone](https://github.com/tangyoha/telegram_media_downloader/wiki/Rclone)
-  - `before_upload_file_zip` - Zip file before upload, default `false`.
-  - `after_upload_file_delete` - Delete file after upload success, default `false`.
-- **file_name_prefix** - Custom file name, use the same as **file_path_prefix**
-  - `message_id` - Message id
-  - `file_name` - File name (may be empty)
-  - `caption` - The title of the message (may be empty)
-- **file_name_prefix_split** - Custom file name prefix symbol, the default is `-`
-- **max_download_task** - The maximum number of task download tasks, the default is 5.
-- **hide_file_name** - Whether to hide the web interface file name, default `false`
-- **web_host** - Web host
-- **web_port** - Web port
-- **language** - Application language, the default is English (`EN`), optional `ZH`(Chinese),`RU`,`UA`
-- **web_login_secret** - Web page login password, if not configured, no login is required to access the web page
-- **log_level** - see `logging._nameToLevel`.
-- **forward_limit** - Limit the number of forwards per minute, the default is 33, please do not modify this parameter by default.
-- **allowed_user_ids** - Who is allowed to use the robot? The default login account can be used. Please add single quotes to the name with @.
-- **date_format** Support custom configuration of media_datetime format in file_path_prefix.see [python-datetime](https://docs.python.org/3/library/datetime.html)
-- **enable_download_txt** Enable download txt file, default `false`
+## 🐳 Docker
 
-## Execution
+```bash
+# Using our optimized image
+docker pull winroot/telegram_media_downloader:latest
 
-```sh
-python3 media_downloader.py
+# Or build from source
+docker build -t telegram_media_downloader .
+docker run -v /path/to/config:/app/config telegram_media_downloader
 ```
 
-All downloaded media will be stored at the root of `save_path`.
-The specific location reference is as follows:
+## 📚 Documentation
 
-The complete directory of video download is: `save_path`/`chat_title`/`media_datetime`/`media_type`.
-The order of the list is not fixed and can be randomly combined.
-If the configuration is empty, all files are saved under `save_path`.
+- [CLAUDE.md](./CLAUDE.md) - Development guide and troubleshooting
+- [OPTIMIZATIONS.md](./OPTIMIZATIONS.md) - Detailed optimization notes
+- [BOT_COMMANDS.md](./BOT_COMMANDS.md) - Bot command usage guide
 
-## Proxy
+## 🛠️ Development with Claude Code
 
-`socks4, socks5, http` proxies are supported in this project currently. To use it, add the following to the bottom of your `config.yaml` file
+This project showcases the power of AI-assisted development. All enhancements were implemented through:
 
-```yaml
-proxy:
-  scheme: socks5
-  hostname: 127.0.0.1
-  port: 1234
-  username: your_username(delete the line if none)
-  password: your_password(delete the line if none)
-```
+1. **Intelligent Debugging** - Claude Code analyzed logs and identified root causes
+2. **Code Generation** - New features written with AI assistance
+3. **Testing & Validation** - Comprehensive test cases generated automatically
+4. **Documentation** - All docs written collaboratively with Claude
 
-If your proxy doesn’t require authorization you can omit username and password. Then the proxy will automatically be enabled.
+Experience AI-powered development: [Try Claude Code](https://claude.ai/code)
 
-## Contributing
+## 🤝 Contributing
 
-### Contributing Guidelines
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes  
+4. Push to the branch
+5. Open a Pull Request
 
-Read through our [contributing guidelines](https://github.com/tangyoha/telegram_media_downloader/blob/master/CONTRIBUTING.md) to learn about our submission process, coding rules and more.
+## 📄 License
 
-### Want to Help?
+MIT License - See [LICENSE](LICENSE) file
 
-Want to file a bug, contribute some code, or improve documentation? Excellent! Read up on our guidelines for [contributing](https://github.com/tangyoha/telegram_media_downloader/blob/master/CONTRIBUTING.md).
+## 🙏 Acknowledgments
 
-### Code of Conduct
+- Original project by [tangyoha](https://github.com/tangyoha)
+- Enhanced with [Claude Code](https://claude.ai/code) by Anthropic
+- Community contributors and testers
 
-Help us keep Telegram Media Downloader open and inclusive. Please read and follow our [Code of Conduct](https://github.com/tangyoha/telegram_media_downloader/blob/master/CODE_OF_CONDUCT.md).
+---
+
+<p align="center">
+  Made with ❤️ using Claude Code
+</p>
