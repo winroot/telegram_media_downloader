@@ -88,7 +88,17 @@ pip3 install -r requirements.txt
 ### Running
 
 ```bash
+# Direct run (recommended)
 python3 media_downloader.py
+
+# Run in background with screen
+screen -dmS telegram_downloader python3 media_downloader.py
+
+# View logs
+tail -f logs/app_*.log
+
+# Monitor download progress
+tail -f logs/download_*.log
 ```
 
 ### Web Interface
@@ -116,16 +126,27 @@ save_path: /path/to/downloads
 max_download_task: 5
 ```
 
-## 🐳 Docker
+## 🐳 Docker Support
+
+> ⚠️ **Note**: Docker version has not been tested with our optimizations. We recommend using the direct Python installation method for the best experience with all enhanced features.
+
+If you want to use Docker, you can try the original project's Docker image:
 
 ```bash
-# Using our optimized image
-docker pull winroot/telegram_media_downloader:latest
+# Original project Docker image (may not include our enhancements)
+docker pull tangyoha/telegram_media_downloader:latest
 
-# Or build from source
+# Or build from our source (experimental)
+git clone https://github.com/winroot/telegram_media_downloader.git
+cd telegram_media_downloader
 docker build -t telegram_media_downloader .
 docker run -v /path/to/config:/app/config telegram_media_downloader
 ```
+
+For production use with our enhancements, we recommend:
+1. Direct Python installation (fully tested)
+2. Running with `python3 media_downloader.py`
+3. Using systemd or screen for background execution
 
 ## 📚 Documentation
 
